@@ -126,6 +126,32 @@ audio = generator.generate(
 torchaudio.save("audio.wav", audio.unsqueeze(0).cpu(), generator.sample_rate)
 ```
 
+#### Best-of-N generation
+
+Generate `N` candidates and keep the one an ensemble of ASR-verifier rankings prefers, so the choice is not biased toward a single ASR family. Each verifier transcribes a candidate, its word-error rate against the requested text is ranked within that verifier's family, and per-family ranks are combined (`rank_average` or `conjunctive_max_rank`). Inspect `result.family_top_pick` to see where the families disagree.
+
+```python
+from best_of_n import WhisperVerifier
+
+verifiers = [
+    WhisperVerifier(model="openai/whisper-tiny", device=device),
+    # add a wav2vec 2.0 / HuBERT verifier (same Verifier protocol) to
+    # triangulate across ASR families
+]
+
+result = generator.generate_best_of_n(
+    text="Hello from Sesame.",
+    speaker=0,
+    context=[],
+    verifiers=verifiers,
+    n=8,
+    ensemble="rank_average",
+)
+torchaudio.save("audio.wav", result.audio.unsqueeze(0).cpu(), generator.sample_rate)
+```
+
+Adapted from *Best-of-N TTS Evaluation is Confounded by ASR Family Alignment*.
+
 ## FAQ
 
 **Does this model come with any voices?**

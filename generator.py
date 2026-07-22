@@ -1,9 +1,10 @@
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Sequence, Tuple
 
 import torch
 import torchaudio
 from huggingface_hub import hf_hub_download
+from best_of_n import BestOfNResult, run_best_of_n
 from models import Model
 from moshi.models import loaders
 from tokenizers.processors import TemplateProcessing
@@ -166,6 +167,44 @@ class Generator:
         audio = torchaudio.functional.resample(audio, orig_freq=wm_sample_rate, new_freq=self.sample_rate)
 
         return audio
+
+    def generate_best_of_n(
+        self,
+        text: str,
+        speaker: int,
+        context: List[Segment],
+        verifiers: Sequence[object],
+        n: int = 5,
+        max_audio_length_ms: float = 90_000,
+        temperature: float = 0.9,
+        topk: int = 50,
+        ensemble: str = "rank_average",
+    ) -> BestOfNResult:
+        """Generate ``n`` candidates and return the one an ASR-family rank
+        ensemble prefers.
+
+        Best-of-N selection with cross-family rank ensembles, adapted from
+        "Best-of-N TTS Evaluation is Confounded by ASR Family Alignment"
+        (arXiv:2607.08256). Each ``verifier`` transcribes a candidate and its
+        WER against ``text`` is computed; per-family candidate *ranks* (not raw
+        WER) are combined via ``ensemble`` (``"rank_average"`` or
+        ``"conjunctive_max_rank"``) so the pick is not biased toward a single
+        ASR family. Inspect ``result.family_top_pick`` to see where the families
+        disagree.
+        """
+        return run_best_of_n(
+            self.generate,
+            verifiers,
+            text,
+            speaker,
+            context,
+            n=n,
+            max_audio_length_ms=max_audio_length_ms,
+            temperature=temperature,
+            topk=topk,
+            ensemble=ensemble,
+            sample_rate=self.sample_rate,
+        )
 
 
 def load_csm_1b(device: str = "cuda") -> Generator:
