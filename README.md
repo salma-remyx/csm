@@ -154,3 +154,45 @@ By using this model, you agree to comply with all applicable laws and ethical gu
 
 ## Authors
 Johan Schalkwyk, Ankit Kumar, Dan Lyth, Sefik Emre Eskimez, Zack Hodari, Cinjon Resnick, Ramon Sanabria, Raven Jiang, and the Sesame team.
+
+## Best-of-N generation
+
+CSM samples each utterance stochastically (`temperature`, `topk`), so drawing
+several candidates and keeping the best one improves content consistency.
+`best_of_n.py` performs Best-of-N selection with a **cross-family ASR rank
+ensemble**: candidates are scored by verifiers, ranked under each verifier, and
+the ranks are fused so no single verifier dominates the choice.
+
+A single ASR verifier can have its rankings reversed by which ASR *family* is
+used as the judge, so pass verifiers from different families (for example
+Whisper, wav2vec 2.0, and HuBERT) to triangulate. Two fusion rules are
+available: `RANK_AVERAGE` (mean rank across families) and
+`CONJUNCTIVE_MAX_RANK` (minimax; favours candidates no single family ranks
+poorly).
+
+```python
+from generator import load_csm_1b
+from best_of_n import bon_generate, build_whisper_verifier, RANK_AVERAGE
+
+generator = load_csm_1b(device="cuda")
+
+# One ASR family is shown for brevity; add verifiers from other families for
+# cross-family triangulation.
+verifier = build_whisper_verifier(source_sample_rate=generator.sample_rate)
+
+audio, info = bon_generate(
+    generator,
+    text="Hello from Sesame.",
+    speaker=0,
+    context=[],
+    n=10,
+    verifiers=[verifier],
+    method=RANK_AVERAGE,
+    max_audio_length_ms=10_000,
+)
+```
+
+`bon_generate` wraps `generator.generate`, which resets its caches at the start
+of every call, so the `n` candidates are independent. It returns the selected
+audio tensor plus an `info` dict holding the chosen `index`, the per-family
+`ranks`, and the raw `scores`.
