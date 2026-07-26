@@ -168,9 +168,33 @@ class Generator:
         return audio
 
 
-def load_csm_1b(device: str = "cuda") -> Generator:
+def apply_fisher_channel_scaling(model, calibration=None, bits: int = 4):
+    """Apply C-PTQ-style Fisher-weighted channel scaling to ``model``'s Linear layers.
+
+    Training-free post-training-quantization preparation: computes per-channel
+    scales from a Fisher-weighted sensitivity objective (a tractable Hessian
+    approximation) and folds them in as an exact float equivalence that
+    redistributes quantization error away from task-sensitive outlier channels,
+    ready for a downstream torchao quantizer. Adapted from C-PTQ
+    (arXiv:2607.21076v1); see ``fisher_channel_scaling`` for the substituted
+    auxiliary components.
+    """
+    from fisher_channel_scaling import fisher_scale_model
+
+    return fisher_scale_model(model, activations=calibration, bits=bits)
+
+
+def load_csm_1b(
+    device: str = "cuda", apply_fisher_scaling: bool = False, calibration=None
+) -> Generator:
     model = Model.from_pretrained("sesame/csm-1b")
     model.to(device=device, dtype=torch.bfloat16)
+
+    if apply_fisher_scaling:
+        # Optionally prepare the backbone for weight-only PTQ (C-PTQ). Default
+        # off so existing callers are unaffected; the scaling is non-destructive
+        # in float and only changes what a later torchao quantizer sees.
+        apply_fisher_channel_scaling(model, calibration=calibration)
 
     generator = Generator(model)
     return generator
