@@ -154,3 +154,30 @@ By using this model, you agree to comply with all applicable laws and ethical gu
 
 ## Authors
 Johan Schalkwyk, Ankit Kumar, Dan Lyth, Sefik Emre Eskimez, Zack Hodari, Cinjon Resnick, Ramon Sanabria, Raven Jiang, and the Sesame team.
+
+---
+
+## Stage-aware quantization — adapted from VibeVoice-ASR-BitNet
+
+CSM ships two stages inside `Model`: an autoregressive Llama `backbone` and a smaller audio `decoder`. `stage_quantize` applies a *different* torchao quantization recipe to each stage so the compute-heavy LM is compressed most aggressively while the acoustic decoder keeps a milder precision. This is retraining free and runs on top of the repo's already-pinned `torchao` (==0.9.0).
+
+```python
+from generator import load_csm_1b
+from stage_quantize import quantize_model, DEFAULT_STAGE_RECIPES
+
+generator = load_csm_1b(device="cpu")
+report = quantize_model(generator._model)
+print(report["weight_compression_ratio_est"])  # estimated weight-byte shrink factor
+print(DEFAULT_STAGE_RECIPES)  # {'backbone': 'int4_weight_only', 'decoder': 'int8_weight_only'}
+```
+
+Override the per-stage recipes for a different accuracy/size trade-off:
+
+```python
+quantize_model(
+    generator._model,
+    stage_recipes={"backbone": "int8_weight_only", "decoder": "int8_weight_only"},
+)
+```
+
+Measure the CPU inference speedup against the unquantized baseline (the suggested RTF-vs-baseline experiment) with `stage_quantize.time_forward`.
