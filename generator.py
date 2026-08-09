@@ -3,6 +3,7 @@ from typing import List, Tuple
 
 import torch
 import torchaudio
+from audio_metrics import MetricResult, score_pair
 from huggingface_hub import hf_hub_download
 from models import Model
 from moshi.models import loaders
@@ -166,6 +167,17 @@ class Generator:
         audio = torchaudio.functional.resample(audio, orig_freq=wm_sample_rate, new_freq=self.sample_rate)
 
         return audio
+
+    def evaluate_audio(self, generated: torch.Tensor, reference: torch.Tensor) -> MetricResult:
+        """Score generated audio against a reference with objective TTS metrics.
+
+        Computes mel-cepstral distortion (dB) and F0 RMSE (cents) between the
+        output of :meth:`generate` and a ground-truth reference at this
+        generator's sample rate. Adapted from the multi-metric TTS evaluation
+        framework (arXiv:2608.02235); the paper's subjective protocols and
+        speaker-similarity scoring are intentionally out of scope here.
+        """
+        return score_pair(generated, reference, self.sample_rate)
 
 
 def load_csm_1b(device: str = "cuda") -> Generator:

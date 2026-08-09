@@ -126,6 +126,26 @@ audio = generator.generate(
 torchaudio.save("audio.wav", audio.unsqueeze(0).cpu(), generator.sample_rate)
 ```
 
+#### Evaluate generated audio
+
+Objective acoustic-quality metrics (adapted from a multi-metric TTS evaluation framework) let you score `generate()` output against a ground-truth reference with mel-cepstral distortion (dB) and F0 RMSE (cents).
+
+```python
+from audio_metrics import score_corpus
+
+# `generated` is the output of generator.generate(...); `reference` is a
+# 1-D ground-truth audio tensor at generator.sample_rate.
+result = generator.evaluate_audio(generated, reference)
+print(result.mcd_db, result.f0_rmse_cents)
+
+# Or benchmark across speech domains, e.g. conversational vs. emotional:
+scores = score_corpus(
+    [(generated_a, reference_a, "conversational"),
+     (generated_b, reference_b, "emotional")],
+    sample_rate=generator.sample_rate,
+)
+```
+
 ## FAQ
 
 **Does this model come with any voices?**
