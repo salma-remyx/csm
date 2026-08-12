@@ -154,3 +154,38 @@ By using this model, you agree to comply with all applicable laws and ethical gu
 
 ## Authors
 Johan Schalkwyk, Ankit Kumar, Dan Lyth, Sefik Emre Eskimez, Zack Hodari, Cinjon Resnick, Ramon Sanabria, Raven Jiang, and the Sesame team.
+
+## Evaluating generated audio
+
+CSM ships inference only. To measure how faithfully a generation matches a same-speaker reference clip, `audio_metrics.py` implements the objective evaluation suite from "Domain-Specific Evaluation of Text-to-Speech Systems" — mel-cepstral distortion (MCD), F0 RMSE (in cents), and a speaker-similarity score — and `evaluate_tts.py` runs it over `Generator.generate()` outputs, grouping results by speech domain so you can see which domains are hardest for the model.
+
+#### Score a generated conversation
+
+This generates each turn and scores it against the matching speaker's reference clip.
+
+```python
+from generator import load_csm_1b, Segment
+from evaluate_tts import score_conversation, format_report
+
+generator = load_csm_1b(device="cuda")
+
+# Same-speaker reference clip for each speaker.
+reference = Segment(text="...", speaker=0, audio=...)
+
+turns = [
+    ("Hey, how are you?", 0, "conversational"),
+    ("I now pronounce the meeting open.", 0, "formal"),
+]
+scores, report = score_conversation(
+    generator, turns, speaker_references={0: reference}
+)
+print(format_report(report))
+```
+
+#### Score two WAV files
+
+```bash
+python evaluate_tts.py --generated gen.wav --reference ref.wav --domain conversational
+```
+
+Speaker similarity uses a parameter-free MFCC proxy for the paper's Resemblyzer encoder; the subjective MUSHRA and ABX protocols require human listeners and are out of scope here.
