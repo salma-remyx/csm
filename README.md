@@ -154,3 +154,32 @@ By using this model, you agree to comply with all applicable laws and ethical gu
 
 ## Authors
 Johan Schalkwyk, Ankit Kumar, Dan Lyth, Sefik Emre Eskimez, Zack Hodari, Cinjon Resnick, Ramon Sanabria, Raven Jiang, and the Sesame team.
+
+---
+
+## Evaluating generated speech
+
+`tts_eval.py` is a small evaluation harness that runs a `Generator` over a set of prompts grouped by speech domain — Formal, Conversational, Literary/Storytelling, and Emotional — and reports per-domain acoustic-fidelity metrics for the generated audio. It is adapted from the multi-metric, domain-specific benchmarking framework in [Domain-Specific Evaluation of Text-to-Speech Systems](https://arxiv.org/abs/2608.02235).
+
+Metrics (all parameter-free, no dependencies beyond `torch`/`torchaudio`):
+
+* **MCD** — mel-cepstral distortion in dB, computed along a DTW frame alignment so utterances of different lengths are comparable.
+* **F0 RMSE** — root-mean-square error of the fundamental-frequency contour, in cents, on frames voiced in both clips.
+* **Speaker similarity** — cosine similarity between mean log-mel embeddings of the generated audio and the reference audio.
+
+```bash
+python tts_eval.py --audio-dir eval_audio --output eval_results.json
+```
+
+Prompts come from `tts_eval.DEFAULT_CASES`; supply your own by passing a list of `EvalCase` to `run_benchmark`. A case that references a prompt audio file uses that utterance both as conversational context and as the scoring reference; cases without one are generated context-free and reported with duration only. Pointing the prompt at a real recording of the target voice turns the harness into a domain-conditioned quality check on `Generator.generate`.
+
+```python
+from tts_eval import run_benchmark, EvalCase
+
+report = run_benchmark(
+    generator.generate,
+    [EvalCase("emotional", 0, "I can't believe we finally made it!", prompt="voice.wav")],
+    audio_dir="eval_audio",
+)
+print("\n".join(report.summary_lines()))
+```
