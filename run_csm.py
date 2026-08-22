@@ -3,6 +3,7 @@ import torch
 import torchaudio
 from huggingface_hub import hf_hub_download
 from generator import load_csm_1b, Segment
+from causal_enhancer import CausalEnhancer
 from dataclasses import dataclass
 
 # Disable Triton compilation
@@ -43,17 +44,23 @@ SPEAKER_PROMPTS = {
     }
 }
 
-def load_prompt_audio(audio_path: str, target_sample_rate: int) -> torch.Tensor:
+def load_prompt_audio(
+    audio_path: str, target_sample_rate: int, enhancer: CausalEnhancer = None
+) -> torch.Tensor:
     audio_tensor, sample_rate = torchaudio.load(audio_path)
     audio_tensor = audio_tensor.squeeze(0)
     # Resample is lazy so we can always call it
     audio_tensor = torchaudio.functional.resample(
         audio_tensor, orig_freq=sample_rate, new_freq=target_sample_rate
     )
+    if enhancer is not None:
+        audio_tensor = enhancer.enhance(audio_tensor)
     return audio_tensor
 
-def prepare_prompt(text: str, speaker: int, audio_path: str, sample_rate: int) -> Segment:
-    audio_tensor = load_prompt_audio(audio_path, sample_rate)
+def prepare_prompt(
+    text: str, speaker: int, audio_path: str, sample_rate: int, enhancer: CausalEnhancer = None
+) -> Segment:
+    audio_tensor = load_prompt_audio(audio_path, sample_rate, enhancer=enhancer)
     return Segment(text=text, speaker=speaker, audio=audio_tensor)
 
 def main():
@@ -64,6 +71,13 @@ def main():
         device = "cpu"
     print(f"Using device: {device}")
 
+    # Denoise prompt audio before it is tokenized (opt in via the environment)
+    enhancer = (
+        CausalEnhancer(sample_rate=24000, device=device)
+        if os.environ.get("CSM_ENHANCE_PROMPTS")
+        else None
+    )
+
     # Load model
     generator = load_csm_1b(device)
 
@@ -72,14 +86,16 @@ def main():
         SPEAKER_PROMPTS["conversational_a"]["text"],
         0,
         SPEAKER_PROMPTS["conversational_a"]["audio"],
-        generator.sample_rate
+        generator.sample_rate,
+        enhancer=enhancer
     )
 
     prompt_b = prepare_prompt(
         SPEAKER_PROMPTS["conversational_b"]["text"],
         1,
         SPEAKER_PROMPTS["conversational_b"]["audio"],
-        generator.sample_rate
+        generator.sample_rate,
+        enhancer=enhancer
     )
 
     # Generate conversation

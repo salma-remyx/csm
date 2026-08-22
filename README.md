@@ -126,6 +126,31 @@ audio = generator.generate(
 torchaudio.save("audio.wav", audio.unsqueeze(0).cpu(), generator.sample_rate)
 ```
 
+#### Denoise prompt audio
+
+Prompt audio is tokenized as-is, so stationary background noise in a context prompt carries into the generation. `causal_enhancer.py` provides an optional fixed-latency denoiser applied to context audio before it reaches Mimi — causal waveform-in/waveform-out with a one-frame state, ~21 ms algorithmic latency at 24 kHz (adapted from *RT-SEMamba: Real-Time Speech Enhancement Mamba via Progressive Knowledge Distillation*, arXiv:2608.12099).
+
+Enhancement is off by default. Pass `enhance_audio=True` when constructing the `Generator`:
+
+```python
+from generator import Generator
+from models import Model
+
+model = Model.from_pretrained("sesame/csm-1b")
+model.to(device=device, dtype=torch.bfloat16)
+generator = Generator(model, enhance_audio=True)
+```
+
+`run_csm.py` denoises its speaker prompts when run with `CSM_ENHANCE_PROMPTS=1`.
+
+The enhancer can also be used on its own:
+
+```python
+from causal_enhancer import enhance
+
+clean = enhance(noisy_audio)  # (num_samples,) at 24 kHz
+```
+
 ## FAQ
 
 **Does this model come with any voices?**

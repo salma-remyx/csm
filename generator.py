@@ -3,6 +3,7 @@ from typing import List, Tuple
 
 import torch
 import torchaudio
+from causal_enhancer import CausalEnhancer
 from huggingface_hub import hf_hub_download
 from models import Model
 from moshi.models import loaders
@@ -40,6 +41,7 @@ class Generator:
     def __init__(
         self,
         model: Model,
+        enhance_audio: bool = False,
     ):
         self._model = model
         self._model.setup_caches(1)
@@ -53,6 +55,11 @@ class Generator:
         self._audio_tokenizer = mimi
 
         self._watermarker = load_watermarker(device=device)
+
+        # Optional fixed-latency denoiser applied to context audio before it
+        # reaches Mimi, so stationary noise in a prompt is not tokenized and
+        # leaked into the generation. Off by default: enabled explicitly.
+        self._enhancer = CausalEnhancer(device=device) if enhance_audio else None
 
         self.sample_rate = mimi.sample_rate
         self.device = device
@@ -80,6 +87,8 @@ class Generator:
 
         # (K, T)
         audio = audio.to(self.device)
+        if self._enhancer is not None:
+            audio = self._enhancer.enhance(audio)
         audio_tokens = self._audio_tokenizer.encode(audio.unsqueeze(0).unsqueeze(0))[0]
         # add EOS frame
         eos_frame = torch.zeros(audio_tokens.size(0), 1).to(self.device)
@@ -168,9 +177,9 @@ class Generator:
         return audio
 
 
-def load_csm_1b(device: str = "cuda") -> Generator:
+def load_csm_1b(device: str = "cuda", enhance_audio: bool = False) -> Generator:
     model = Model.from_pretrained("sesame/csm-1b")
     model.to(device=device, dtype=torch.bfloat16)
 
-    generator = Generator(model)
+    generator = Generator(model, enhance_audio=enhance_audio)
     return generator
